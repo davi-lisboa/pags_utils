@@ -306,3 +306,147 @@ def get_stone(
         stone.reset_index(drop=True, inplace=True)
     
     return stone
+
+
+# get_cielo
+def get_cielo(
+    indice: str = 'Mensal',  # Frequência do índice (Mensal, Trimestral, Semestral, Anual)
+    local: str = 'all',      # Localidade a filtrar
+    in_pct: bool = False,   # Se True, converte os valores para porcentagem
+    date_index: bool = True  # Se True, a coluna 'Data' será o índice
+            ):
+    """
+    Recupera os dados do Índice Cielo de Vendas (ICVA) e retorna um DataFrame do Pandas.
+
+    Args:
+        indice: Frequência do índice a ser recuperado.
+        local: Localidade a filtrar. Use 'all' para incluir todos.
+        in_pct: Se True, converte os valores para porcentagem.
+        date_index: Se True, a coluna 'Data' será o índice do DataFrame.
+
+    Returns:
+        pd.DataFrame: DataFrame com os dados do ICVA, filtrados e formatados.
+
+    Raises:
+        NameError: Se o valor de `indice` for inválido.
+    """
+    import pandas as pd
+    import datetime as dt
+    import wget
+    import os
+
+    # Calcula a data do mês passado para construir a URL
+    hoje = dt.date.today()  # Obtém a data de hoje
+    data_mes_passado = hoje - pd.offsets.MonthBegin(2)  # Subtrai 2 meses para obter o início do mês passado
+    mes_passado = data_mes_passado.month  # Extrai o número do mês
+    ano_mes_passado = data_mes_passado.year  # Extrai o ano
+
+    # Dicionário para mapear números de meses para suas abreviações
+    meses = {
+                1: 'Jan', 2: 'Fev', 3: 'Mar',
+                4: 'Abr', 5: 'Mai', 6: 'Jun',
+                7: 'Jul', 8: 'Ago', 9: 'Set',
+                10: 'Out', 11: 'Nov', 12: 'Dez'
+            }
+    
+    # Constrói a URL completa para o download do arquivo Excel
+    url = f"https://www.cielo.com.br/docs/inteligencia-de-dados/{ano_mes_passado}/Historico_ICVA_{meses[mes_passado]}_{data_mes_passado.strftime('%y')}.xlsx"
+
+    # Baixa o arquivo Excel e determina o nome do arquivo
+    arq_name = wget.detect_filename(url) # Obtém o nome do arquivo automaticamente a partir da URL
+    wget.download(url, arq_name) # Baixa o arquivo para o diretório atual
+
+    indice = indice.title()
+
+    if indice in ['Mensal', 'Trimestral', 'Semestral', 'Anual']:
+
+        # Importação do arquivo como dataframe do pandas
+        if indice == 'Mensal':
+            cielo = pd.read_excel(arq_name, skiprows=6, skipfooter=1, sheet_name = 'Índice ' + indice).drop(columns='Unnamed: 0')
+        else:
+            cielo = pd.read_excel(arq_name, skiprows=6, sheet_name = 'Índice ' + indice).drop(columns='Unnamed: 0')
+
+        # Formata o df para um formato mais conveniente
+        cielo = (
+                    cielo
+                    .melt(id_vars=['Setor', 'Localidade', 'Visão'], var_name='Data', value_name='ICVA')
+                    .pivot(index=['Data', 'Setor', 'Localidade'], columns='Visão', values='ICVA')
+                    .reset_index()
+                )
+        
+        # -------------------- Ajuste nos nomes das colunas ----------------------------------
+        cielo.columns.name = ''
+        cielo.columns = [col.strip() for col in cielo.columns] # Retira espaços extras
+
+        # -------------------- Ajustes nas datas para cada índice -------------------------------
+        
+        if indice == 'Mensal':
+            cielo['Data'] = pd.to_datetime(cielo['Data']) # Ajusta a coluna para tipo data
+        
+        elif indice == 'Trimestral':
+            cielo.rename(columns={'Data':'Trimestre'}, inplace = True) # Renomeia coluna
+
+            # Ajuste ns coluna para ser reconhecida como período
+            cielo['Trimestre'] = cielo['Trimestre'].str.replace('T', 'Q') 
+            cielo['Trimestre'] = pd.PeriodIndex(cielo['Trimestre'], freq='Q')
+
+            # Criação de nova coluna do tipo data
+            cielo = cielo.assign( Data = cielo['Trimestre'].map( lambda x: x.strftime("%Y-%m") + '-01' ) )    
+            cielo['Data'] = pd.to_datetime(cielo['Data'])
+            
+            cielo['Trimestre'] = list( map( lambda x: str(x), cielo['Trimestre'] ) ) # Mantém a coluna como string
+            cielo = cielo.reindex(columns=['Data', 'Trimestre', 'Setor', 'Localidade', 'Deflacionado', 'Nominal']) # Organiza as colunas
+        
+        elif indice == 'Semestral':
+            cielo.rename(columns={'Data':'Semestre'}, inplace = True) # Renomeia a coluna
+
+            # Cria nova coluna de data
+            cielo['year'] = ('20' + cielo['Semestre'].str[-2:]).astype(int)
+            cielo['mes'] = [6 if i[0] == '1' else 12 for i in cielo['Semestre']  ]
+            cielo['Data'] = [dt.date(ano, mes, 1) for ano, mes in zip(cielo['year'], cielo['mes'])]
+            
+            cielo = cielo.reindex(columns = ['Data', 'Semestre', 'Setor', 'Localidade', 'Deflacionado', 'Nominal']) # Organiza as colunas
+            
+        elif indice == 'Anual':
+            # Não considerei relevante fazer algum tipo de ajuste na data para o índice anual
+            pass
+
+        # ----------------------------------------------------------------------------------------------
+        # Coluna 'Data' vira indice
+        if date_index == True:
+            cielo.set_index('Data', inplace=True)
+
+        # Colunas numéricas como percentual
+        if in_pct == True:
+            if indice != 'Mensal':
+                cielo[['Deflacionado', 'Nominal']] = cielo[['Deflacionado', 'Nominal']] * 100
+            
+            else:
+                num_cols = ['Deflacionado - Com Ajuste Calendário', 'Deflacionado - Sem Ajuste Calendário',
+                            'Nominal - Com Ajuste Calendário', 'Nominal - Sem Ajuste Calendário']
+                
+                cielo[num_cols] = cielo[num_cols] * 100
+        # ---------------------------------------------------------------------------------------------
+        # -------------------------------------- Filtro de localidade ---------------------------------
+        
+        lista_localidade = list( cielo['Localidade'].unique() ) # Cria lista de localidades válidas
+        
+        if local == 'all':
+            pass # Não aplica nenhum filtro
+            
+        elif local in lista_localidade:
+            cielo = cielo.query(f"Localidade == '{local}'") # Aplica filtro
+            
+        else:
+            print(f"\n '{local}' não é um valor válido para o parâmetro ´local´. Tente um do seguintes: ")
+            print(f"{['all'] + lista_localidade}")
+            
+        # Deleta o arquivo baixado
+        os.remove(arq_name)
+        
+        return cielo
+    
+    else:
+        os.remove(arq_name)
+        raise NameError(f"'{indice}' não é um valor válido para o parâmetro ´indice´. Tente um dos seguintes: ['Mensal', 'Trimestral', 'Semestral', 'Anual']")
+    
