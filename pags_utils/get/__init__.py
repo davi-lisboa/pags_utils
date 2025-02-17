@@ -450,3 +450,26 @@ def get_cielo(
         os.remove(arq_name)
         raise NameError(f"'{indice}' não é um valor válido para o parâmetro ´indice´. Tente um dos seguintes: ['Mensal', 'Trimestral', 'Semestral', 'Anual']")
     
+
+# get_ipea
+def get_ipea(series: dict, 
+             start: str | None = None, 
+             end: str | None = None):
+    
+    import pandas as pd
+    import ipeadatapy as ipea
+    
+    final_df = pd.DataFrame()
+    
+    for nome, code in series_dict.items():
+        df_temp = (ipea.timeseries(series = code, )
+                   .iloc[:, [0, 5] ]
+                   .reset_index()
+                   )
+        df_temp.columns = ['Date', 'Indicador', 'Valor']
+        
+        df_temp['Indicador'] = nome
+        
+        final_df = pd.concat([final_df, df_temp], ignore_index=True)
+        
+    return final_df
