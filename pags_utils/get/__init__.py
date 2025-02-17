@@ -473,3 +473,35 @@ def get_ipea(series: dict,
         final_df = pd.concat([final_df, df_temp], ignore_index=True)
         
     return final_df
+
+# get_hiato_bcb()
+def get_hiato_bcb():
+    """
+        Função para coletar os dados de Hiato do Produto estimado pelo Banco Central do Brasil.
+        Sempre retorna os dados referentes ao Relatório Trimestral de Inflação mais recente.
+    """
+
+    import pandas as pd
+    import datetime as dt
+    from math import ceil
+    
+    data = dt.date.today()
+    while True:
+        # Determina o trimestre a qual o mês pertence e retornando o mês final do tri na forma mm
+        mes = str(ceil(data.month / 3) * 3).zfill(2)
+        ano = data.year # Separa o ano da data
+
+        # Aplica o mês e o ano na url base
+        url= f"https://www.bcb.gov.br/content/ri/relatorioinflacao/{ano}{mes}/ri{ano}{mes}anp.xlsx"
+    
+        # Tenta fazer coletar os dados a partir da URL, se der certo sai do loop,
+        # se der errado, retrocede 1 mês e tenta novamente até que um arquivo válido seja identificado
+        try: 
+            df = pd.read_excel(url, sheet_name='Graf 2.2.8', skiprows=8).dropna()
+            break
+        
+        except:
+            data = data - pd.offsets.MonthBegin(1)
+            continue
+        
+    return df
