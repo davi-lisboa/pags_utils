@@ -461,7 +461,7 @@ def get_ipea(series: dict,
     
     final_df = pd.DataFrame()
     
-    for nome, code in series_dict.items():
+    for nome, code in series.items():
         df_temp = (ipea.timeseries(series = code, )
                    .iloc[:, [0, 5] ]
                    .reset_index()
