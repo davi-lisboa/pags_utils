@@ -362,9 +362,11 @@ def get_cielo(
 
         # Importação do arquivo como dataframe do pandas
         if indice == 'Mensal':
-            cielo = pd.read_excel(arq_name, skiprows=6, skipfooter=1, sheet_name = 'Índice ' + indice).drop(columns='Unnamed: 0')
+            cielo = pd.read_excel(arq_name, skiprows=6, skipfooter=1, sheet_name = 'Índice ' + indice).drop(columns='Unnamed: 0').dropna(axis=1, how='all')
         else:
             cielo = pd.read_excel(arq_name, skiprows=6, sheet_name = 'Índice ' + indice).drop(columns='Unnamed: 0')
+
+        cielo['Localidade'] = cielo['Localidade'].str.replace(' ', '-')
 
         # Formata o df para um formato mais conveniente
         cielo = (
@@ -449,6 +451,7 @@ def get_cielo(
     else:
         os.remove(arq_name)
         raise NameError(f"'{indice}' não é um valor válido para o parâmetro ´indice´. Tente um dos seguintes: ['Mensal', 'Trimestral', 'Semestral', 'Anual']")
+ 
     
 
 # get_ipea
