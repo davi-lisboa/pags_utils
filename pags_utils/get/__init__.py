@@ -91,6 +91,49 @@ def get_mdic():
 
     return mdic
 
+# get_mdic_api
+def get_mdic_api(dado: str, start: str, end: str = (dt.date.today() - pd.offsets.MonthEnd(1) ).strftime('%Y-%m') ) -> pd.DataFrame:
+    import pandas as pd
+    import datetime as dt
+    import requests
+    import warnings
+    warnings.filterwarnings('ignore')
+
+    ano_fim = (dt.date.today() + pd.offsets.YearEnd(0) ).strftime('%Y-%m')
+    start_date = dt.datetime.strptime(start, '%Y-%m').date()
+    end_date = dt.datetime.strptime(end, '%Y-%m').date()
+
+    url = "https://api-comexstat.mdic.gov.br/general"
+
+    querystring = {"language":"pt"}
+    
+    payload = {
+        "flow": dado,
+        "monthDetail": True,
+        "period": {
+            "from": start,
+            "to": ano_fim
+                    },
+        "metrics": ["metricFOB"],
+            }
+
+    response = requests.post(url, json=payload, params=querystring, verify=False)
+
+    dados_json = response.json()['data']['list']
+    
+    df = pd.DataFrame(dados_json).astype('int64')
+
+    df = (df.assign(date =  [ dt.date(ano, mes, 1) for mes, ano in zip( df['monthNumber'], df['year'] ) ] )
+          .rename(columns = {'metricFOB': dado})
+          .drop(columns=['year', 'monthNumber'])
+          .set_index('date')
+          .sort_index()
+          .query('date >= @start_date and date <= @end_date')
+         )
+
+    return df
+
+
 
 # get_stn
 def get_stn() -> pd.DataFrame:
